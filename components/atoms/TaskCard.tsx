@@ -11,10 +11,10 @@ interface TaskCardProps {
 export default function TasksCard(props: TaskCardProps) {
 
     return (
-        <div className="bg-[#16181D] rounded-md border-t-5 border-indigo-900 max-w-150 p-5">
+        <div className="bg-[#16181D] hover:bg-[#1F232B] rounded-md border-t-5 border-indigo-900 max-w-150 p-5">
             <div className="w-full flex flex-row mb-5 justify-between">
                 <h3 className="basis-1/2 font-mono text-xs leading-none tracking-wide text-slate-500 tabular-nums">0{props.taskNumber}</h3>
-                <div className="basis-1/2 font-mono text-[10px] uppercase leading-none tracking-[0.06em] rounded border-2 border-[#7DB0AD] text-center text-[#7DB0AD] max-w-8">{props.subsystemName}</div>
+                <div className="basis-1/2  p-1 font-mono text-[10px] uppercase leading-none tracking-[0.06em] rounded-xl border-2 border-[#7DB0AD] text-center text-[#7DB0AD] max-w-10">{props.subsystemName}</div>
             </div>
                 <h3 className="font-sans text-base font-semibold leading-snug tracking-tight text-slate-100 text-balance">{props.taskName}</h3>
                 <p className="mb-15 font-sans text-xs font-normal leading-relaxed text-slate-400 text-pretty">{props.taskSubname}</p>
