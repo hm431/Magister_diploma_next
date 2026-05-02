@@ -6,10 +6,11 @@ interface TaskCardProps {
     taskName: string;
     taskSubname: string;
     taskDescription: string;
+    taskPath: string;
 }
 // Карточка описания и открытия задачи
 export default function TasksCard(props: TaskCardProps) {
-
+    console.log(props.taskPath)
     return (
         <div className="bg-[#16181D] hover:bg-[#1F232B] rounded-md border-t-5 border-indigo-900 max-w-150 p-5">
             <div className="w-full flex flex-row mb-5 justify-between">
@@ -22,7 +23,7 @@ export default function TasksCard(props: TaskCardProps) {
                 <p>{props.taskDescription}</p>
             </div>
             <div className="flex w-full justify-end">
-                <Link className="font-sans text-xs font-medium leading-none tracking-tight text-sky-400" href={`/tasks/${props.taskNumber}`}>Открыть →</Link> 
+                <Link className="font-sans text-xs font-medium leading-none tracking-tight text-sky-400" href={`/tasks/${props.taskPath}`}>Открыть →</Link> 
             </div>
         </div>
     )

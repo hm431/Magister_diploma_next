@@ -8,6 +8,7 @@ const tasks = [
             taskName: "Календарный график работ",
             taskSubname: "с учётом наличия материалов",
             taskDescription: "RCPSP — сетевая модель с ресурсными ограничениями",
+            taskPath: "work-schedule"
         },
         {
             taskNumber: 2,
@@ -15,6 +16,7 @@ const tasks = [
             taskName: "График закупок МТР",
             taskSubname: "под утверждённый график строительства",
             taskDescription: "Временна́я модель потребности ресурсов + балансовая модель",
+            taskPath: "materials-procurement"
         },
         {
             taskNumber: 3,
@@ -22,6 +24,7 @@ const tasks = [
             taskName: "Загрузка складов и логистика",
             taskSubname: "объекта строительства",
             taskDescription: "Модель массового обслуживания / потоковая модель",
+            taskPath: "warehouse-loading",
         },
         {
             taskNumber: 4,
@@ -29,6 +32,7 @@ const tasks = [
             taskName: "Отклонение сроков по КС-6",
             taskSubname: "недельно-суточный график",
             taskDescription: "Динамическая сетевая модель с пересчётом критического пути",
+            taskPath: "schedule-deviations",
         },
         {
             taskNumber: 5,
@@ -36,6 +40,7 @@ const tasks = [
             taskName: "Задача 05",
             taskSubname: "в разработке",
             taskDescription: "Постановка и математическая модель будут определены на следующем этапе",
+            taskPath: "task-05",
         },
         {
             taskNumber: 6,
@@ -43,6 +48,7 @@ const tasks = [
             taskName: "Задача 06",
             taskSubname: "в разработке",
             taskDescription: "Постановка и математическая модель будут определены на следующем этапе",
+            taskPath: "task-06",
         },
     ];
     return (
@@ -55,6 +61,7 @@ const tasks = [
                  taskName={item.taskName}
                  taskSubname={item.taskSubname}
                  taskDescription={item.taskDescription}
+                 taskPath={item.taskPath}
             /> 
             ))}
            
