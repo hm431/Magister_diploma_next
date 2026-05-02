@@ -46,15 +46,18 @@ const tasks = [
         },
     ];
     return (
-        <div className="divide-y divide-solid divide-indigo-500">
-            
-            <TasksCard
-                 taskNumber={1}
-                 subsystemName="СРО"
-                 taskName="Календарный график работ"
-                 taskSubname="с учётом наличия материалов"
-                 taskDescription="RCPSP — сетевая модель с ресурсными ограничениями"
+        <div className="grid grid-cols-2 gap-4">
+            {tasks.map((item) =>(
+                 <TasksCard
+                 key={item.taskNumber}
+                 taskNumber={item.taskNumber}
+                 subsystemName={item.subsystemName}
+                 taskName={item.taskName}
+                 taskSubname={item.taskSubname}
+                 taskDescription={item.taskDescription}
             /> 
+            ))}
+           
             
         </div>
     )
