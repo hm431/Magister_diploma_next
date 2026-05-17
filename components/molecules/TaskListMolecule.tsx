@@ -1,54 +1,54 @@
 import TasksCard from "../atoms/TaskCard";
 
 export function TaskListMolecule () {
-const tasks = [
+    const tasks = [
         {
             taskNumber: 1,
             subsystemName: "СРО",
             taskName: "Календарный график работ",
             taskSubname: "с учётом наличия материалов",
-            taskDescription: "RCPSP — сетевая модель с ресурсными ограничениями",
+            taskDescription: "CPM/RCPSP — сетевая модель с ресурсными ограничениями. Диаграмма Ганта с критическим путём.",
             taskPath: "work-schedule"
         },
         {
             taskNumber: 2,
-            subsystemName: "МТР",
-            taskName: "График закупок МТР",
-            taskSubname: "под утверждённый график строительства",
-            taskDescription: "Временна́я модель потребности ресурсов + балансовая модель",
-            taskPath: "materials-procurement"
+            subsystemName: "СРО",
+            taskName: "Распределение бригад",
+            taskSubname: "оптимизация назначений на участки",
+            taskDescription: "LP-модель с весовой целевой функцией F₃ = α₁c₁ + α₂c₂ + α₃c₃.",
+            taskPath: "brigade-assignment"
         },
         {
             taskNumber: 3,
-            subsystemName: "МТР",
-            taskName: "Загрузка складов и логистика",
-            taskSubname: "объекта строительства",
-            taskDescription: "Модель массового обслуживания / потоковая модель",
-            taskPath: "warehouse-loading",
+            subsystemName: "МТО",
+            taskName: "График закупок МТР",
+            taskSubname: "под утверждённый календарный график",
+            taskDescription: "LP-оптимизация поставок F₁, даты доступности T_доступ(j), выгрузка в 1С.",
+            taskPath: "materials-procurement"
         },
         {
             taskNumber: 4,
-            subsystemName: "СРО",
-            taskName: "Отклонение сроков по КС-6",
-            taskSubname: "недельно-суточный график",
-            taskDescription: "Динамическая сетевая модель с пересчётом критического пути",
-            taskPath: "schedule-deviations",
+            subsystemName: "МТО",
+            taskName: "Загрузка складов и логистика",
+            taskSubname: "объекта строительства",
+            taskDescription: "Модель M/M/n: профиль U_t, коэффициент ρ(t), время ожидания W_q(t).",
+            taskPath: "warehouse-loading",
         },
         {
             taskNumber: 5,
-            subsystemName: "—",
-            taskName: "Задача 05",
-            taskSubname: "в разработке",
-            taskDescription: "Постановка и математическая модель будут определены на следующем этапе",
-            taskPath: "task-05",
+            subsystemName: "РИСК",
+            taskName: "Анализ рисков",
+            taskSubname: "имитационная оценка сроков",
+            taskDescription: "Монте-Карло: S-кривая F_T(t), P(T ≤ T_план), квантили T₀.₅ T₀.₈ T₀.₉, индексы CI_i.",
+            taskPath: "risk-analysis",
         },
         {
             taskNumber: 6,
-            subsystemName: "—",
-            taskName: "Задача 06",
-            taskSubname: "в разработке",
-            taskDescription: "Постановка и математическая модель будут определены на следующем этапе",
-            taskPath: "task-06",
+            subsystemName: "ОПС",
+            taskName: "Оперативный контроль",
+            taskSubname: "пересчёт по фактическим данным",
+            taskDescription: "Динамическая сетевая модель: ΔT = ΔT_МТР + ΔT_иные, корректирующие сценарии σ*.",
+            taskPath: "schedule-deviations",
         },
     ];
     return (
@@ -62,10 +62,8 @@ const tasks = [
                  taskSubname={item.taskSubname}
                  taskDescription={item.taskDescription}
                  taskPath={item.taskPath}
-            /> 
+            />
             ))}
-           
-            
         </div>
     )
 }
