@@ -8,23 +8,57 @@ interface TaskCardProps {
     taskDescription: string;
     taskPath: string;
 }
-// Карточка описания и открытия задачи
+
+const SUBSYSTEM_COLORS: Record<string, { border: string; badge: string }> = {
+    СРО:  { border: "border-t-[#7fb3b0]", badge: "border-[#7fb3b0] text-[#7fb3b0]" },
+    МТО:  { border: "border-t-[#c9a06a]", badge: "border-[#c9a06a] text-[#c9a06a]" },
+    РИСК: { border: "border-t-[#6a93c8]", badge: "border-[#6a93c8] text-[#6a93c8]" },
+    ОПС:  { border: "border-t-[#a78bfa]", badge: "border-[#a78bfa] text-[#a78bfa]" },
+};
+
 export default function TasksCard(props: TaskCardProps) {
-    console.log(props.taskPath)
+    const colors = SUBSYSTEM_COLORS[props.subsystemName] ?? {
+        border: "border-t-slate-700",
+        badge:  "border-slate-600 text-slate-500",
+    };
+
     return (
-        <div className="bg-[#16181D] hover:bg-[#1F232B] rounded-md border-t-5 border-indigo-900 max-w-150 p-5">
-            <div className="w-full flex flex-row mb-5 justify-between">
-                <h3 className="basis-1/2 font-mono text-xs leading-none tracking-wide text-slate-500 tabular-nums">0{props.taskNumber}</h3>
-                <div className="basis-1/2  p-1 font-mono text-[10px] uppercase leading-none tracking-[0.06em] rounded-xl border-2 border-[#7DB0AD] text-center text-[#7DB0AD] max-w-10">{props.subsystemName}</div>
+        <div className={`flex flex-col bg-[#16181D] hover:bg-[#1F232B] transition-colors rounded-md border-t-4 ${colors.border} p-5 gap-4`}>
+
+            {/* Шапка: номер + бейдж подсистемы */}
+            <div className="flex items-center justify-between">
+                <span className="font-mono text-[11px] tracking-widest text-slate-600 tabular-nums">
+                    0{props.taskNumber}
+                </span>
+                <span className={`font-mono text-[10px] uppercase tracking-[0.06em] px-2 py-0.5 rounded border ${colors.badge}`}>
+                    {props.subsystemName}
+                </span>
             </div>
-                <h3 className="font-sans text-base font-semibold leading-snug tracking-tight text-slate-100 text-balance">{props.taskName}</h3>
-                <p className="mb-15 font-sans text-xs font-normal leading-relaxed text-slate-400 text-pretty">{props.taskSubname}</p>
-            <div className="flex w-full font-mono text-[10px] font-normal leading-snug tracking-normal text-slate-500 text-pretty border-t-1">
-                <p>{props.taskDescription}</p>
+
+            {/* Название + подзаголовок */}
+            <div className="flex flex-col gap-1">
+                <h3 className="font-sans text-base font-semibold leading-snug tracking-tight text-slate-100">
+                    {props.taskName}
+                </h3>
+                <p className="font-sans text-xs text-slate-400 leading-relaxed">
+                    {props.taskSubname}
+                </p>
             </div>
-            <div className="flex w-full justify-end">
-                <Link className="font-sans text-xs font-medium leading-none tracking-tight text-sky-400" href={`/tasks/${props.taskPath}`}>Открыть →</Link> 
+
+            {/* Описание модели — растягивается чтобы ссылка всегда внизу */}
+            <p className="flex-1 font-mono text-[11px] leading-relaxed text-slate-500 border-t border-slate-800 pt-3">
+                {props.taskDescription}
+            </p>
+
+            {/* Ссылка */}
+            <div className="flex justify-end">
+                <Link
+                    className="font-mono text-[11px] font-medium text-sky-400 hover:text-sky-300 transition-colors no-underline"
+                    href={`/tasks/${props.taskPath}`}
+                >
+                    Открыть →
+                </Link>
             </div>
         </div>
-    )
+    );
 }

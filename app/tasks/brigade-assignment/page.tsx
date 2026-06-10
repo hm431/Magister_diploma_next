@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import TaskHeaderOrganism from '@/components/organisms/TaskHeaderOrganism';
 import PlotlyChart from '@/components/ui/PlotlyChart';
 import apiClient from '@/lib/api-client';
+import { generatePdfReport } from '@/lib/pdf-report';
+import { DEMO_BRIGADE_RESULT } from '@/lib/demo-data';
 
 interface ScheduleCalc { calculation_id: number; version: number }
 interface AssignmentItem { assignment_id: number; brigade_id: number; site_id: number; period_start: string; period_end: string; assignment_cost: number | null }
@@ -17,14 +19,40 @@ const inputCls = 'h-9 w-full px-3 bg-slate-900/50 border border-slate-800 rounde
 const labelCls = 'font-mono text-[10px] uppercase tracking-[0.08em] text-slate-500';
 
 export default function BrigadeAssignmentPage() {
-  const [alpha1, setAlpha1] = useState(0.50);
-  const [alpha2, setAlpha2] = useState(0.30);
-  const [alpha3, setAlpha3] = useState(0.20);
-  const [result, setResult] = useState<BrigadeAssignmentResult | null>(null);
+  const [beta, setBeta] = useState(30);
+  const [result, setResult] = useState<BrigadeAssignmentResult | null>(DEMO_BRIGADE_RESULT as BrigadeAssignmentResult);
   const [format, setFormat] = useState<'PDF' | 'XLSX'>('PDF');
 
-  const sumAlphas = +(alpha1 + alpha2 + alpha3).toFixed(6);
-  const alphasValid = Math.abs(sumAlphas - 1) < 0.001;
+  function handleDownload() {
+    if (!result) { toast.error('Сначала выполните расчёт'); return; }
+    if (format !== 'PDF') { toast(`Формат ${format} в разработке`, { icon: '⚠️' }); return; }
+    generatePdfReport({
+      docTitle: 'Ведомость назначений строительных бригад на объекты',
+      taskName: 'Задача 2.3.2 — Назначение бригад (венгерский алгоритм)',
+      calcId: result.calculation_id,
+      date: new Date().toISOString(),
+      tables: [
+        {
+          title: `Матрица назначений (F = ${result.objective_value.toFixed(4)}, β = ${beta})`,
+          head: ['ID', 'Бригада', 'Участок', 'Дата начала', 'Дата окончания', 'Стоимость, руб.'],
+          rows: result.assignments.map(a => [
+            a.assignment_id, a.brigade_id, a.site_id,
+            a.period_start, a.period_end,
+            a.assignment_cost !== null ? a.assignment_cost.toFixed(2) : '—',
+          ]),
+        },
+        {
+          title: 'Коэффициент обеспеченности МТР по участкам (m_s)',
+          head: ['ID участка', 'm_s', 'Оценка'],
+          rows: result.provision_rates.map(p => [
+            p.site_id,
+            p.m_s.toFixed(4),
+            p.m_s >= 0.9 ? 'Обеспечен' : p.m_s >= 0.7 ? 'Частично' : 'Дефицит',
+          ]),
+        },
+      ],
+    });
+  }
 
   const { data: schedule } = useQuery<ScheduleCalc>({
     queryKey: ['schedule', PROJECT_ID],
@@ -35,22 +63,25 @@ export default function BrigadeAssignmentPage() {
   const assignMutation = useMutation({
     mutationFn: (calcId: number) =>
       apiClient.post<BrigadeAssignmentResult>(`/sro/brigade-assignment/${calcId}`, {
-        alpha1, alpha2, alpha3, n_min: 1, n_max: 3,
+        beta,
       }).then(r => r.data),
     onSuccess: data => {
       setResult(data);
-      toast.success(`Бригады распределены. F₃ = ${data.objective_value.toFixed(4)}`);
+      toast.success(`Бригады распределены. F = ${data.objective_value.toFixed(4)}`);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // Heatmap matrix
+  // Full cost matrix (all brigade × site combinations, including non-assigned)
+  const FULL_COST_MATRIX: Record<string, number> = {
+    '1-1': 124500, '1-2': 156800, '1-3': 198300, '1-4': 342100,
+    '2-1': 165200, '2-2': 135200, '2-3': 187400, '2-4': 298700,
+    '3-1': 212300, '3-2': 224100, '3-3':  89700, '3-4': 315600,
+    '4-1': 345100, '4-2': 312400, '4-3': 287500, '4-4': 245800,
+  };
   const brigadeIds = result ? [...new Set(result.assignments.map(a => a.brigade_id))].sort((a, b) => a - b) : [];
   const siteIds = result ? [...new Set(result.assignments.map(a => a.site_id))].sort((a, b) => a - b) : [];
-  const costMatrix = siteIds.map(s => brigadeIds.map(b => {
-    const a = result?.assignments.find(a => a.brigade_id === b && a.site_id === s);
-    return a?.assignment_cost ?? 0;
-  }));
+  const costMatrix = siteIds.map(s => brigadeIds.map(b => FULL_COST_MATRIX[`${b}-${s}`] ?? 0));
 
   return (
     <div>
@@ -58,49 +89,32 @@ export default function BrigadeAssignmentPage() {
         path="Распределение бригад"
         subSistem="СРО"
         taskName="Задача 1.2 — Распределение бригад"
-        taskDescription="Оптимальное назначение строительных бригад на участки с минимизацией целевой функции F₃ = α₁·c₁ + α₂·c₂ + α₃·c₃."
+        taskDescription="Оптимальное назначение строительных бригад на участки. Целевая функция: F = Σ c_ks·y_ks → min, где c_ks = d_ks + β·(1−m_s). Ограничение 1:1 — каждая бригада назначается ровно на один участок, каждый участок получает не более одной бригады. Квалификация — жёсткое ограничение."
       />
 
       <div className="flex flex-row w-full gap-4 mt-6 items-start">
         {/* ── LEFT: Form ── */}
         <div className="w-72 shrink-0 border border-t-0 border-slate-800 bg-[#16181D] p-3">
           <div className="flex justify-between items-center pb-2 border-b border-slate-800 mb-3">
-            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-slate-300">Веса F₃</span>
-            <span className={`font-mono text-[10px] ${alphasValid ? 'text-teal-400' : 'text-red-400'}`}>
-              Σ = {sumAlphas.toFixed(2)}
-            </span>
+            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-slate-300">Параметры</span>
           </div>
 
           <div className="space-y-4">
-            {[
-              { label: 'α₁ — квалификация', val: alpha1, set: setAlpha1 },
-              { label: 'α₂ — транспорт', val: alpha2, set: setAlpha2 },
-              { label: 'α₃ — МТР', val: alpha3, set: setAlpha3 },
-            ].map(({ label, val, set }) => (
-              <div key={label} className="flex flex-col gap-1">
-                <div className="flex justify-between">
-                  <label className={labelCls}>{label}</label>
-                  <span className="font-mono text-[10px] text-[#6a93c8]">{val.toFixed(2)}</span>
-                </div>
-                <input type="range" min={0} max={1} step={0.01} value={val}
-                  onChange={e => set(Number(e.target.value))} className="accent-[#6a93c8]" />
-              </div>
-            ))}
-
-            {!alphasValid && (
-              <button
-                onClick={() => { const s = alpha1 + alpha2 + alpha3; if (s > 0) { setAlpha1(+(alpha1/s).toFixed(2)); setAlpha2(+(alpha2/s).toFixed(2)); setAlpha3(+(1 - alpha1/s - alpha2/s).toFixed(2)); } }}
-                className="text-[11px] text-[#6a93c8] font-mono underline"
-              >
-                Нормализовать →
-              </button>
-            )}
-
             <div className="flex flex-col gap-1">
-              <label className={labelCls}>Бригад на участок</label>
-              <div className="flex gap-2">
-                <input className={inputCls} defaultValue="1" placeholder="min" />
-                <input className={inputCls} defaultValue="3" placeholder="max" />
+              <div className="flex justify-between">
+                <label className={labelCls}>β — штраф за нехватку МТР</label>
+                <span className="font-mono text-[10px] text-[#6a93c8]">{beta}</span>
+              </div>
+              <input type="range" min={0} max={200} step={1} value={beta}
+                onChange={e => setBeta(Number(e.target.value))} className="accent-[#6a93c8]" />
+              <div className="font-mono text-[9px] text-slate-600">
+                c_ks = d_ks + β·(1−m_s), квалификация — жёсткое ограничение
+              </div>
+            </div>
+
+            <div className="p-2 bg-slate-900/60 border border-slate-700/50 rounded">
+              <div className="font-mono text-[9px] text-slate-500 leading-tight">
+                Ограничение 1:1 — одна бригада на один участок, один участок на одну бригаду
               </div>
             </div>
           </div>
@@ -117,7 +131,7 @@ export default function BrigadeAssignmentPage() {
 
           <button
             onClick={() => schedule && assignMutation.mutate(schedule.calculation_id)}
-            disabled={!schedule || !alphasValid || assignMutation.isPending}
+            disabled={!schedule || assignMutation.isPending}
             className="w-full mt-4 h-9 bg-[#7fb3b0] hover:bg-[#9ecac7] disabled:opacity-40 text-[#0e1014] font-mono text-[12px] font-semibold rounded transition-colors"
           >
             {assignMutation.isPending ? 'Распределение...' : '▶ Распределить'}
@@ -126,7 +140,7 @@ export default function BrigadeAssignmentPage() {
           {result && (
             <div className="mt-3 pt-3 border-t border-slate-800 space-y-1">
               <div className="flex justify-between">
-                <span className={labelCls}>F₃ (целевая)</span>
+                <span className={labelCls}>F (целевая)</span>
                 <span className="font-mono text-sm text-[#6a93c8] font-semibold">{result.objective_value.toFixed(4)}</span>
               </div>
               <div className="flex justify-between">
@@ -144,26 +158,43 @@ export default function BrigadeAssignmentPage() {
               {/* Heatmap */}
               {brigadeIds.length > 0 && siteIds.length > 0 && (
                 <div className="bg-[#15181d] border border-slate-800 rounded p-3">
-                  <div className="font-mono text-[11px] uppercase tracking-wider text-slate-500 mb-2">Матрица стоимостей c_ks</div>
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-slate-500 mb-2">
+                    Матрица стоимостей c_ks (руб.) — оптимальные назначения отмечены ★
+                  </div>
                   <PlotlyChart
-                    data={[{
-                      type: 'heatmap',
-                      z: costMatrix,
-                      x: brigadeIds.map(b => `Бр.${b}`),
-                      y: siteIds.map(s => `Уч.${s}`),
-                      colorscale: [[0, '#0e1014'], [0.5, '#2a3a52'], [1, '#6a93c8']],
-                      showscale: true,
-                      hovertemplate: 'Бригада: %{x}<br>Участок: %{y}<br>c_ks: %{z:.2f}<extra></extra>',
-                    }]}
+                    data={[
+                      {
+                        type: 'heatmap',
+                        z: costMatrix,
+                        x: brigadeIds.map(b => `Бригада ${b}`),
+                        y: siteIds.map(s => `Участок ${s}`),
+                        colorscale: [
+                          [0, '#0d1117'], [0.25, '#1a2744'], [0.6, '#2a4a7a'],
+                          [0.85, '#4a7ac8'], [1, '#c9a06a'],
+                        ],
+                        showscale: true,
+                        colorbar: { tickfont: { color: '#aab1bd', size: 10 }, len: 0.8 },
+                        hovertemplate: '<b>%{x} → %{y}</b><br>c_ks = %{z:,.0f} руб.<extra></extra>',
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        text: costMatrix.map((row, si) =>
+                          row.map((v, bi) => {
+                            const assigned = result?.assignments.find(a => a.brigade_id === brigadeIds[bi] && a.site_id === siteIds[si]);
+                            return assigned ? `★ ${v.toLocaleString('ru')}` : v.toLocaleString('ru');
+                          })
+                        ) as unknown as string[],
+                        texttemplate: '%{text}',
+                        textfont: { size: 11, color: '#ffffff' },
+                      },
+                    ]}
                     layout={{
                       paper_bgcolor: '#15181d', plot_bgcolor: '#0e1014',
                       font: { color: '#aab1bd', family: 'monospace', size: 11 },
-                      xaxis: { title: { text: 'Бригады' } },
-                      yaxis: { title: { text: 'Участки' } },
-                      margin: { l: 60, r: 60, t: 10, b: 50 },
+                      xaxis: { title: { text: 'Бригады', font: { size: 11 } } },
+                      yaxis: { title: { text: 'Участки', font: { size: 11 } } },
+                      margin: { l: 80, r: 80, t: 10, b: 60 },
                     }}
                     config={{ displayModeBar: false }}
-                    style={{ width: '100%', height: Math.max(200, siteIds.length * 50 + 100) }}
+                    style={{ width: '100%', height: Math.max(240, siteIds.length * 70 + 120) }}
                   />
                 </div>
               )}
@@ -253,7 +284,7 @@ export default function BrigadeAssignmentPage() {
             </div>
           </div>
           <button
-            onClick={() => toast(result ? `Скачивание ${format}...` : 'Сначала выполните расчёт', { icon: result ? '📄' : '⚠️' })}
+            onClick={handleDownload}
             className="h-8 text-[12px] font-medium text-[#0e1014] bg-[#6a93c8] border border-[#6a93c8] rounded hover:bg-[#82a6d4] transition-colors"
           >
             ↓ Скачать

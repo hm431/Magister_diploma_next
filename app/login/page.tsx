@@ -83,10 +83,26 @@ function LoginForm() {
   );
 }
 
+function BackButton() {
+  const router = useRouter();
+  return (
+    <button
+      onClick={() => router.back()}
+      className="mb-6 flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300 transition-colors"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15 18l-6-6 6-6" />
+      </svg>
+      Назад
+    </button>
+  );
+}
+
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-[#0e1014] flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
+        <BackButton />
         {/* Logo */}
         <div className="flex items-center gap-3 mb-10">
           <div className="w-8 h-8 rounded bg-[#6a93c8] flex items-center justify-center">

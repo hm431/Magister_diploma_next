@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import TaskHeaderOrganism from '@/components/organisms/TaskHeaderOrganism';
-import PlotlyChart from '@/components/ui/PlotlyChart';
 import GanttChart, { GanttWork } from '@/components/ui/GanttChart';
+import PlotlyChart from '@/components/ui/PlotlyChart';
 import apiClient from '@/lib/api-client';
+import { generatePdfReport } from '@/lib/pdf-report';
+import { DEMO_RECALC_RESULT, DEMO_WORKS } from '@/lib/demo-data';
 
 interface DeviationItem {
   work_id: number; plan_percent: number; fact_percent: number;
@@ -21,9 +23,13 @@ interface ScenarioResult {
 }
 interface RecalculateResponse {
   project_id: number; calculation_id: number;
-  t_plan: number; t_actual: number; delta_t: number; delta_t_mtr: number; delta_t_other: number;
+  t_plan: number; t_actual: number; delta_t: number;
   deviations: DeviationItem[]; schedule: ScheduleItemActual[]; scenarios: ScenarioResult[];
 }
+interface ScheduleItemRead {
+  work_id: number; es: number; ef: number; ls: number; lf: number; tf: number; is_critical: boolean;
+}
+interface ScheduleCalculationRead { items: ScheduleItemRead[] }
 interface OpsFormFields { t_0: string; beta1: string; beta2: string; beta3: string }
 
 const PROJECT_ID = 1;
@@ -41,10 +47,66 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function ScheduleDeviationsPage() {
-  const [result, setResult] = useState<RecalculateResponse | null>(null);
+  const { data: planCalc } = useQuery<ScheduleCalculationRead>({
+    queryKey: ['schedule', PROJECT_ID, 'plan'],
+    queryFn: () =>
+      apiClient.get<ScheduleCalculationRead>(`/schedule/${PROJECT_ID}/latest?scenario=plan`).then(r => r.data),
+    staleTime: 5 * 60_000,
+  });
+
+  // Use DEMO_WORKS names if API hasn't returned plan schedule yet
+  const demoWorkNames = Object.fromEntries(DEMO_WORKS.map(w => [w.id, w.name]));
+  const planGanttWorks: GanttWork[] = (planCalc?.items ?? DEMO_RECALC_RESULT.schedule).map(s => ({
+    id: s.work_id,
+    name: demoWorkNames[s.work_id] ?? `Работа #${s.work_id}`,
+    es: s.es, ef: s.ef, ls: s.ls, lf: s.lf, tf: s.tf, is_critical: s.is_critical,
+  }));
+
+  const [result, setResult] = useState<RecalculateResponse | null>(DEMO_RECALC_RESULT as RecalculateResponse);
   const [approvedScenario, setApprovedScenario] = useState<string | null>(null);
   const [format, setFormat] = useState<'PDF' | 'XLSX'>('PDF');
   const [activeTab, setActiveTab] = useState<'gantt' | 'deviations' | 'scenarios'>('gantt');
+
+  function handleDownload() {
+    if (!result) { toast.error('Сначала выполните расчёт'); return; }
+    if (format !== 'PDF') { toast(`Формат ${format} в разработке`, { icon: '⚠️' }); return; }
+    generatePdfReport({
+      docTitle: 'Отчёт об отклонениях фактического хода строительства от планового',
+      taskName: 'Задача 2.3.6 — Актуализация календарного графика',
+      calcId: result.calculation_id,
+      date: new Date().toISOString(),
+      tables: [
+        {
+          title: `Временны́е параметры (T_план = ${result.t_plan} дн., T_факт = ${result.t_actual.toFixed(1)} дн., ΔT = ${result.delta_t > 0 ? '+' : ''}${result.delta_t.toFixed(1)} дн.)`,
+          head: ['Работа', 'ES', 'EF', 'LS', 'LF', 'TF', 'Критическая'],
+          rows: result.schedule.map(s => [
+            s.work_id, s.es, s.ef, s.ls, s.lf, s.tf, s.is_critical ? 'Да' : 'Нет',
+          ]),
+        },
+        {
+          title: `Отклонения работ (всего: ${result.deviations.length})`,
+          head: ['Работа', 'План, %', 'Факт, %', 'Δ, %', 'МТР-зависимость', 'Категория'],
+          rows: result.deviations.map(d => [
+            d.work_id,
+            (d.plan_percent * 100).toFixed(1),
+            (d.fact_percent * 100).toFixed(1),
+            (d.delta_percent * 100).toFixed(1),
+            d.chi_mtr ? 'Да' : 'Нет',
+            d.category,
+          ]),
+        },
+        ...(result.scenarios.length > 0 ? [{
+          title: 'Корректирующие сценарии с J-оценкой',
+          head: ['Сценарий', 'ΔT, дн.', 'ΔC', 'ΔR', 'J-оценка', 'Оптимальный'],
+          rows: result.scenarios.map(s => [
+            SCENARIO_LABELS[s.scenario_type] ?? s.scenario_type,
+            s.delta_t.toFixed(1), s.delta_c.toFixed(4), s.delta_r.toFixed(4),
+            s.j_score.toFixed(4), s.is_optimal ? 'σ*' : '',
+          ]),
+        }] : []),
+      ],
+    });
+  }
 
   const { register, handleSubmit, watch } = useForm<OpsFormFields>({
     defaultValues: { t_0: new Date().toISOString().split('T')[0], beta1: '0.5', beta2: '0.3', beta3: '0.2' },
@@ -77,9 +139,6 @@ export default function ScheduleDeviationsPage() {
     es: s.es, ef: s.ef, ls: s.ls, lf: s.lf, tf: s.tf, is_critical: s.is_critical,
   }));
 
-  const dtMtr = result?.delta_t_mtr ?? 0;
-  const dtOther = result?.delta_t_other ?? 0;
-
   const TABS = [
     { id: 'gantt' as const, label: 'Актуальный график' },
     { id: 'deviations' as const, label: 'Отклонения' },
@@ -91,8 +150,8 @@ export default function ScheduleDeviationsPage() {
       <TaskHeaderOrganism
         path="Оперативный контроль"
         subSistem="ОПС"
-        taskName="Задача 4 — Оперативный контроль"
-        taskDescription="Динамический пересчёт сроков по фактическим данным. Декомпозиция отклонения ΔT = ΔT_МТР + ΔT_иные. Выбор оптимального корректирующего сценария σ*."
+        taskName="Задача 2.3.6 — Актуализированный недельно-суточный график"
+        taskDescription="Маппинг план/факт через JOIN. Классификация причин отклонений (МТР / иное). Прогнозируемые ES для не начатых работ. Корректирующие сценарии: J = β₁·ΔT + β₂·ΔC + β₃·ΔR → min."
       />
 
       <div className="flex flex-row w-full gap-4 mt-6 items-start">
@@ -143,7 +202,6 @@ export default function ScheduleDeviationsPage() {
                   label: 'ΔT', color: result.delta_t > 0 ? 'text-red-400' : 'text-teal-300',
                   value: (result.delta_t > 0 ? '+' : '') + result.delta_t.toFixed(1) + ' дн.',
                 },
-                { label: 'ΔT_МТР', value: result.delta_t_mtr.toFixed(1) + ' дн.', color: 'text-amber-300' },
               ].map(k => (
                 <div key={k.label} className="flex justify-between items-center">
                   <span className={labelCls}>{k.label}</span>
@@ -175,38 +233,77 @@ export default function ScheduleDeviationsPage() {
 
               {activeTab === 'gantt' && (
                 <div className="flex flex-col gap-4">
-                  {/* Pie chart decomposition */}
-                  {(dtMtr + dtOther) > 0 && (
-                    <div className="bg-[#15181d] border border-slate-800 rounded p-3">
-                      <div className="font-mono text-[11px] uppercase tracking-wider text-slate-500 mb-2">Декомпозиция ΔT</div>
-                      <PlotlyChart
-                        data={[{
-                          type: 'pie',
-                          labels: ['ΔT_МТР', 'ΔT_иные'],
-                          values: [Math.max(dtMtr, 0), Math.max(dtOther, 0)],
-                          hole: 0.45,
-                          marker: { colors: ['#c9a06a', '#6a93c8'] },
-                          textinfo: 'label+percent',
-                          textfont: { color: '#e8eaee', size: 11 },
-                        }]}
-                        layout={{
-                          paper_bgcolor: '#15181d', font: { color: '#aab1bd', family: 'monospace' },
-                          margin: { l: 20, r: 20, t: 20, b: 20 }, showlegend: false, height: 200,
-                        }}
-                        style={{ width: '100%', height: 200 }}
-                      />
-                    </div>
-                  )}
                   <div className="bg-[#15181d] border border-slate-800 rounded p-3">
                     <div className="font-mono text-[11px] uppercase tracking-wider text-slate-500 mb-2">
                       Актуализированный график
                     </div>
-                    <GanttChart works={ganttWorks} />
+                    <GanttChart works={ganttWorks} planWorks={planGanttWorks} />
                   </div>
                 </div>
               )}
 
               {activeTab === 'deviations' && (
+                <div className="flex flex-col gap-4">
+                {/* Plan vs Fact grouped bar chart */}
+                {(() => {
+                  const active = result.deviations.filter(d => d.plan_percent > 0 || d.fact_percent > 0);
+                  const labels = active.map(d => demoWorkNames[d.work_id] ?? `Работа #${d.work_id}`);
+                  return (
+                    <div className="bg-[#15181d] border border-slate-800 rounded p-3">
+                      <div className="font-mono text-[11px] uppercase tracking-wider text-slate-500 mb-2">
+                        Выполнение работ: план vs. факт (%)
+                      </div>
+                      <PlotlyChart
+                        data={[
+                          {
+                            type: 'bar', name: 'План',
+                            x: labels, y: active.map(d => d.plan_percent),
+                            marker: { color: 'rgba(106,147,200,0.55)', line: { color: '#6a93c8', width: 1 } },
+                            hovertemplate: '<b>%{x}</b><br>План: %{y:.1f}%<extra></extra>',
+                          },
+                          {
+                            type: 'bar', name: 'Факт',
+                            x: labels, y: active.map(d => d.fact_percent),
+                            marker: {
+                              color: active.map(d =>
+                                d.chi_mtr ? 'rgba(245,158,11,0.75)' :
+                                d.delta_percent < -10 ? 'rgba(239,68,68,0.75)' : 'rgba(127,179,176,0.75)'
+                              ),
+                              line: {
+                                color: active.map(d =>
+                                  d.chi_mtr ? '#f59e0b' : d.delta_percent < -10 ? '#ef4444' : '#7fb3b0'
+                                ),
+                                width: 1,
+                              },
+                            },
+                            hovertemplate: '<b>%{x}</b><br>Факт: %{y:.1f}%<extra></extra>',
+                          },
+                        ]}
+                        layout={{
+                          barmode: 'group',
+                          paper_bgcolor: '#15181d', plot_bgcolor: '#0e1014',
+                          font: { color: '#aab1bd', family: 'monospace', size: 10 },
+                          xaxis: { gridcolor: '#272c34', tickangle: -30, automargin: true },
+                          yaxis: { gridcolor: '#272c34', title: { text: 'Выполнение, %' }, range: [0, 115] },
+                          legend: { bgcolor: 'rgba(21,24,29,0.8)', bordercolor: '#272c34', borderwidth: 1, font: { size: 10 } },
+                          bargap: 0.25, bargroupgap: 0.05,
+                          margin: { l: 50, r: 15, t: 15, b: 90 },
+                          annotations: active
+                            .filter(d => d.delta_percent < 0)
+                            .map(d => ({
+                              x: demoWorkNames[d.work_id] ?? `Работа #${d.work_id}`,
+                              y: Math.max(d.plan_percent, d.fact_percent) + 3,
+                              text: `${d.delta_percent.toFixed(0)}%`,
+                              showarrow: false,
+                              font: { size: 9, color: d.chi_mtr ? '#f59e0b' : '#ef4444' },
+                            })),
+                        }}
+                        config={{ displayModeBar: false }}
+                        style={{ width: '100%', height: 300 }}
+                      />
+                    </div>
+                  );
+                })()}
                 <div className="bg-[#15181d] border border-slate-800 rounded overflow-hidden">
                   <div className="font-mono text-[11px] uppercase tracking-wider text-slate-500 px-4 py-2 border-b border-slate-800">
                     Отклонения по работам
@@ -238,6 +335,7 @@ export default function ScheduleDeviationsPage() {
                       </tbody>
                     </table>
                   </div>
+                </div>
                 </div>
               )}
 
@@ -320,7 +418,7 @@ export default function ScheduleDeviationsPage() {
             </div>
           </div>
           <button
-            onClick={() => toast(result ? `Скачивание ${format}...` : 'Сначала выполните расчёт', { icon: result ? '📄' : '⚠️' })}
+            onClick={handleDownload}
             className="h-8 text-[12px] font-medium text-[#0e1014] bg-[#6a93c8] border border-[#6a93c8] rounded hover:bg-[#82a6d4] transition-colors"
           >
             ↓ Скачать

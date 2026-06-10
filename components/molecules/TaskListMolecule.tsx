@@ -4,7 +4,7 @@ export function TaskListMolecule () {
     const tasks = [
         {
             taskNumber: 1,
-            subsystemName: "СРО",
+            subsystemName: "",
             taskName: "Календарный график работ",
             taskSubname: "с учётом наличия материалов",
             taskDescription: "CPM/RCPSP — сетевая модель с ресурсными ограничениями. Диаграмма Ганта с критическим путём.",
@@ -12,7 +12,7 @@ export function TaskListMolecule () {
         },
         {
             taskNumber: 2,
-            subsystemName: "СРО",
+            subsystemName: "",
             taskName: "Распределение бригад",
             taskSubname: "оптимизация назначений на участки",
             taskDescription: "LP-модель с весовой целевой функцией F₃ = α₁c₁ + α₂c₂ + α₃c₃.",
@@ -20,7 +20,7 @@ export function TaskListMolecule () {
         },
         {
             taskNumber: 3,
-            subsystemName: "МТО",
+            subsystemName: "",
             taskName: "График закупок МТР",
             taskSubname: "под утверждённый календарный график",
             taskDescription: "LP-оптимизация поставок F₁, даты доступности T_доступ(j), выгрузка в 1С.",
@@ -28,7 +28,7 @@ export function TaskListMolecule () {
         },
         {
             taskNumber: 4,
-            subsystemName: "МТО",
+            subsystemName: "",
             taskName: "Загрузка складов и логистика",
             taskSubname: "объекта строительства",
             taskDescription: "Модель M/M/n: профиль U_t, коэффициент ρ(t), время ожидания W_q(t).",
@@ -36,7 +36,7 @@ export function TaskListMolecule () {
         },
         {
             taskNumber: 5,
-            subsystemName: "РИСК",
+            subsystemName: "",
             taskName: "Анализ рисков",
             taskSubname: "имитационная оценка сроков",
             taskDescription: "Монте-Карло: S-кривая F_T(t), P(T ≤ T_план), квантили T₀.₅ T₀.₈ T₀.₉, индексы CI_i.",
@@ -44,7 +44,7 @@ export function TaskListMolecule () {
         },
         {
             taskNumber: 6,
-            subsystemName: "ОПС",
+            subsystemName: "",
             taskName: "Оперативный контроль",
             taskSubname: "пересчёт по фактическим данным",
             taskDescription: "Динамическая сетевая модель: ΔT = ΔT_МТР + ΔT_иные, корректирующие сценарии σ*.",
@@ -52,7 +52,7 @@ export function TaskListMolecule () {
         },
     ];
     return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
             {tasks.map((item) =>(
                  <TasksCard
                  key={item.taskNumber}

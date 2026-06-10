@@ -2,15 +2,19 @@
 
 import Link from 'next/link';
 import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { NavButton } from '@/components/atoms/NavButton';
 import { useAuthStore } from '@/lib/auth-store';
 
 export function Header() {
   const { user, logout, loadFromStorage } = useAuthStore();
+  const pathname = usePathname();
 
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
+
+  if (pathname === '/login') return null;
 
   return (
     <header>

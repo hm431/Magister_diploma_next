@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import TaskHeaderOrganism from '@/components/organisms/TaskHeaderOrganism';
 import PlotlyChart from '@/components/ui/PlotlyChart';
 import apiClient from '@/lib/api-client';
+import { generatePdfReport } from '@/lib/pdf-report';
+import { DEMO_SUPPLY_RESULT } from '@/lib/demo-data';
 
 interface ScheduleCalc { calculation_id: number; version: number; t_min: number | null }
 interface DemandRow { material_id: number; demand_date: string; quantity: number }
@@ -22,9 +24,42 @@ const inputCls = 'h-9 w-full px-3 bg-slate-900/50 border border-slate-800 rounde
 const labelCls = 'font-mono text-[10px] uppercase tracking-[0.08em] text-slate-500';
 
 export default function MaterialsProcurementPage() {
-  const [result, setResult] = useState<SupplyPlanResponse | null>(null);
-  const [selectedMat, setSelectedMat] = useState<number | null>(null);
+  const [result, setResult] = useState<SupplyPlanResponse | null>(DEMO_SUPPLY_RESULT as SupplyPlanResponse);
+  const [selectedMat, setSelectedMat] = useState<number | null>(1);
   const [format, setFormat] = useState<'PDF' | 'XLSX'>('PDF');
+
+  function handleDownload() {
+    if (!result) { toast.error('Сначала выполните расчёт'); return; }
+    if (format !== 'PDF') { toast(`Формат ${format} в разработке`, { icon: '⚠️' }); return; }
+    generatePdfReport({
+      docTitle: 'График закупок и поставок материально-технических ресурсов',
+      taskName: 'Задача 2.3.4 — Оптимальный план поставок МТР (жадный алгоритм)',
+      calcId: result.calculation_id,
+      date: new Date().toISOString(),
+      tables: [
+        {
+          title: `Плановые поставки (Итого: ${result.total_cost.toFixed(0)} руб., статус: ${result.solver_status})`,
+          head: ['Материал', 'Поставщик', 'Склад', 'Дата поставки', 'Объём', 'Цена, руб./ед.'],
+          rows: result.deliveries.map(d => [
+            d.material_id, d.supplier_id, d.warehouse_id,
+            d.planned_date,
+            d.planned_volume.toFixed(3),
+            d.unit_cost.toFixed(2),
+          ]),
+        },
+        {
+          title: 'Суточная потребность в МТР',
+          head: ['Материал', 'Дата', 'Количество'],
+          rows: result.demand.map(d => [d.material_id, d.demand_date, d.quantity.toFixed(3)]),
+        },
+        {
+          title: 'Дата доступности МТР по материалам',
+          head: ['Материал', 'Дата доступности'],
+          rows: result.availability.map(a => [a.material_id, a.availability_date]),
+        },
+      ],
+    });
+  }
 
   const { data: schedule } = useQuery<ScheduleCalc>({
     queryKey: ['schedule', PROJECT_ID],
@@ -50,10 +85,16 @@ export default function MaterialsProcurementPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const MAT_NAMES: Record<number, string> = {
+    1: 'Труба ПЭ100 RC Ду500 PN10',
+    2: 'Задвижка клиновая Ду500 PN16',
+    3: 'Колодец смотровый КЦ1000-1',
+  };
   const materialIds = result ? [...new Set(result.demand.map(d => d.material_id))] : [];
   const activeMat = selectedMat ?? materialIds[0];
   const demandRows = result?.demand.filter(d => d.material_id === activeMat) ?? [];
   const avail = result?.availability.find(a => a.material_id === activeMat);
+  const cumulative = demandRows.reduce<number[]>((acc, r) => [...acc, (acc[acc.length - 1] ?? 0) + r.quantity], []);
 
   return (
     <div>
@@ -146,7 +187,7 @@ export default function MaterialsProcurementPage() {
                       onClick={() => setSelectedMat(mid)}
                       className={`h-7 px-3 rounded font-mono text-[11px] transition-colors ${activeMat === mid ? 'bg-[#c9a06a] text-[#0e1014]' : 'border border-slate-700 text-slate-400 hover:text-slate-200'}`}
                     >
-                      МТР #{mid}
+                      {MAT_NAMES[mid] ?? `МТР #${mid}`}
                     </button>
                   ))}
                 </div>
@@ -155,7 +196,7 @@ export default function MaterialsProcurementPage() {
               {/* Demand chart */}
               <div className="bg-[#15181d] border border-slate-800 rounded p-3">
                 <div className="font-mono text-[11px] uppercase tracking-wider text-slate-500 mb-2">
-                  Плановая потребность Q_jt — МТР #{activeMat}
+                  Плановая потребность Q_jt — {MAT_NAMES[activeMat] ?? `МТР #${activeMat}`}
                 </div>
                 <PlotlyChart
                   data={[
@@ -163,28 +204,50 @@ export default function MaterialsProcurementPage() {
                       type: 'bar',
                       x: demandRows.map(d => d.demand_date),
                       y: demandRows.map(d => d.quantity),
-                      name: `Q_jt МТР #${activeMat}`,
-                      marker: { color: '#c9a06a' },
+                      name: 'Q_jt (недельная)',
+                      marker: {
+                        color: demandRows.map(d => d.quantity),
+                        colorscale: [[0, '#7a5c2a'], [0.5, '#c9a06a'], [1, '#e8c090']],
+                        showscale: false,
+                      },
+                      hovertemplate: '<b>%{x}</b><br>Потребность: %{y} ед.<extra></extra>',
+                    },
+                    {
+                      type: 'scatter', mode: 'lines+markers',
+                      x: demandRows.map(d => d.demand_date),
+                      y: cumulative,
+                      name: 'Нарастающим итогом',
+                      yaxis: 'y2',
+                      line: { color: '#6a93c8', width: 2, dash: 'dot' },
+                      marker: { size: 5, color: '#6a93c8' },
+                      hovertemplate: '<b>%{x}</b><br>Итого: %{y} ед.<extra></extra>',
                     },
                     ...(avail ? [{
                       type: 'scatter' as const,
                       mode: 'lines' as const,
                       x: [avail.availability_date, avail.availability_date],
-                      y: [0, Math.max(...demandRows.map(d => d.quantity), 1) * 1.15],
+                      y: [0, Math.max(...demandRows.map(d => d.quantity), 1) * 1.2],
                       name: `T_доступ = ${avail.availability_date}`,
                       line: { color: '#ef4444', dash: 'dash' as const, width: 2 },
+                      hovertemplate: `T_доступ: ${avail.availability_date}<extra></extra>`,
                     }] : []),
                   ]}
                   layout={{
                     paper_bgcolor: '#15181d', plot_bgcolor: '#0e1014',
                     font: { color: '#aab1bd', family: 'monospace', size: 11 },
-                    xaxis: { gridcolor: '#272c34', title: { text: 'Дата' } },
-                    yaxis: { gridcolor: '#272c34', title: { text: 'Объём' } },
-                    legend: { bgcolor: 'transparent' },
-                    margin: { l: 50, r: 10, t: 10, b: 50 },
+                    xaxis: { gridcolor: '#272c34', title: { text: 'Дата поставки' } },
+                    yaxis: { gridcolor: '#272c34', title: { text: 'Объём (ед.)' } },
+                    yaxis2: {
+                      overlaying: 'y', side: 'right', showgrid: false,
+                      title: { text: 'Нараст. итог (ед.)' },
+                      tickfont: { color: '#6a93c8', size: 10 },
+                    },
+                    legend: { bgcolor: 'rgba(21,24,29,0.8)', bordercolor: '#272c34', borderwidth: 1 },
+                    bargap: 0.25,
+                    margin: { l: 55, r: 65, t: 15, b: 55 },
                   }}
                   config={{ displayModeBar: true, toImageButtonOptions: { format: 'png', filename: 'demand' } }}
-                  style={{ width: '100%', height: 280 }}
+                  style={{ width: '100%', height: 300 }}
                 />
               </div>
 
@@ -270,7 +333,7 @@ export default function MaterialsProcurementPage() {
             </div>
           </div>
           <button
-            onClick={() => toast(result ? `Скачивание ${format}...` : 'Сначала выполните расчёт', { icon: result ? '📄' : '⚠️' })}
+            onClick={handleDownload}
             className="h-8 text-[12px] font-medium text-[#0e1014] bg-[#6a93c8] border border-[#6a93c8] rounded hover:bg-[#82a6d4] transition-colors"
           >
             ↓ Скачать

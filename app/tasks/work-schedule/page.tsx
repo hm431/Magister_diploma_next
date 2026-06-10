@@ -7,6 +7,8 @@ import toast from 'react-hot-toast';
 import TaskHeaderOrganism from '@/components/organisms/TaskHeaderOrganism';
 import GanttChart, { GanttWork } from '@/components/ui/GanttChart';
 import apiClient from '@/lib/api-client';
+import { generatePdfReport } from '@/lib/pdf-report';
+import { DEMO_SCHEDULE, DEMO_WORKS } from '@/lib/demo-data';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Work {
@@ -54,9 +56,33 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function WorkSchedulePage() {
   const qc = useQueryClient();
-  const [schedule, setSchedule] = useState<ScheduleCalc | null>(null);
+  const [schedule, setSchedule] = useState<ScheduleCalc | null>(DEMO_SCHEDULE as ScheduleCalc);
   const [showAddWork, setShowAddWork] = useState(false);
   const [format, setFormat] = useState<'PDF' | 'XLSX' | 'MPP'>('PDF');
+
+  function handleDownload() {
+    if (!schedule) { toast.error('Сначала выполните расчёт'); return; }
+    if (format !== 'PDF') { toast(`Формат ${format} в разработке`, { icon: '⚠️' }); return; }
+    const worksMap = Object.fromEntries((works ?? []).map(w => [w.id, w.name]));
+    generatePdfReport({
+      docTitle: 'Сетевой календарный график производства работ',
+      taskName: 'Задача 2.3.1 — Построение сетевого графика (МКМ)',
+      calcId: schedule.calculation_id,
+      date: new Date().toISOString(),
+      tables: [
+        {
+          title: `Параметры сетевого графика (T_min = ${schedule.t_min} дн., версия ${schedule.version})`,
+          head: ['№ работы', 'Наименование', 'ES', 'EF', 'LS', 'LF', 'TF', 'Крит.'],
+          rows: schedule.items.map(i => [
+            i.work_id,
+            worksMap[i.work_id] ?? `Работа #${i.work_id}`,
+            i.es, i.ef, i.ls, i.lf, i.tf,
+            i.is_critical ? 'Да' : 'Нет',
+          ]),
+        },
+      ],
+    });
+  }
 
   const { data: works, isLoading: worksLoading } = useQuery<Work[]>({
     queryKey: ['works', PROJECT_ID],
@@ -100,14 +126,23 @@ export default function WorkSchedulePage() {
     });
   }
 
-  // Build Gantt data
+  // Build Gantt data — fall back to DEMO_WORKS if API hasn't returned yet
   const ganttWorks: GanttWork[] = (() => {
-    if (!works || !schedule) return [];
+    if (!schedule) return [];
+    const workList = (works && works.length > 0) ? works : DEMO_WORKS;
     const map = new Map(schedule.items.map(i => [i.work_id, i]));
-    return works.flatMap(w => {
+    return workList.flatMap(w => {
       const item = map.get(w.id);
       if (!item) return [];
-      return [{ id: w.id, name: w.name, es: item.es, ef: item.ef, ls: item.ls, lf: item.lf, tf: item.tf, is_critical: item.is_critical }];
+      return [{
+        id: w.id,
+        name: w.name,
+        es: item.es, ef: item.ef,
+        ls: item.ls, lf: item.lf,
+        tf: item.tf,
+        is_critical: item.is_critical,
+        predecessors: w.predecessors,
+      }];
     });
   })();
 
@@ -350,7 +385,7 @@ export default function WorkSchedulePage() {
           </div>
 
           <button
-            onClick={() => toast(schedule ? `Скачивание ${format}...` : 'Сначала выполните расчёт', { icon: schedule ? '📄' : '⚠️' })}
+            onClick={handleDownload}
             className="h-8 inline-flex items-center justify-center px-3.5 text-[12px] font-medium text-[#0e1014] bg-[#6a93c8] border border-[#6a93c8] rounded transition-colors hover:bg-[#82a6d4]"
           >
             ↓ Скачать
